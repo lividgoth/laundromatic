@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Weather Report, Sunset Time, and Laundry Recommendation</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+        }
+    </style>
+</head>
+<body>
+    <h1>Weather Report, Sunset Time, and Laundry Recommendation</h1>
+    <div>
+        <label for="location">Enter your location:</label>
+        <input type="text" id="location" placeholder="City, Country">
+        <button id="getLocationWeather">Get Weather</button>
+    </div>
+    <div id="weather">
+        <p>Waiting for location...</p>
+    </div>
+    <div id="recommendation">
+        <p class="hidden" id="laundryRecommendation">
+            Laundry start time:
+        </p>
+    </div>
+    <div id="sunset">
+        <p class="hidden" id="sunset-time">
+            Sunset time:
+        </p>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/suncalc/1.8.0/suncalc.min.js"></script>
+    <script>
+        // openweather map api key
+        const openWeatherMapApiKey = 'de289c5d653e1c07634d635abe878deb';
+
+        const locationInput = document.getElementById('location');
+        const getWeatherButton = document.getElementById('getLocationWeather');
+        const weatherDiv = document.getElementById('weather');
+        const recommendationDiv = document.getElementById('recommendation');
+        const sunsetDiv = document.getElementById('sunset');
+
+        // Function to convert Celsius to Fahrenheit
+        function celsiusToFahrenheit(celsius) {
+            return (celsius * 9/5) + 32;
+        }
+
+        // Function to format temperature in both Fahrenheit and Celsius
+        function formatTemperature(celsius) {
+            const fahrenheit = celsiusToFahrenheit(celsius);
+            return `${celsius}°C / ${fahrenheit.toFixed(2)}°F`;
+        }
+
+        // Function to format time in HH:MM format
+        function formatTime(date) {
+            const hours = date.getHours().toString().padStart(2, '0');
+            const minutes = date.getMinutes().toString().padStart(2, '0');
+            return `${hours}:${minutes}`;
+        }
+
+        // Event listener for the Get Weather button
+        getWeatherButton.addEventListener('click', () => {
+            const location = locationInput.value;
+
+            // Fetch weather data from OpenWeatherMap API based on user's location
+            fetch(`https://api.openweathermap.org/data/2.5/weather?q=${location}&appid=${openWeatherMapApiKey}&units=metric`)
+                .then(response => response.json())
+                .then(data => {
+                    const temperatureCelsius = data.main.temp;
+                    const temperatureFahrenheit = celsiusToFahrenheit(temperatureCelsius);
+                    const description = data.weather[0].main.toLowerCase();
+                    const rainChance = data.rain && data.rain['1h'] ? data.rain['1h'] : 0; // Rainfall in the last hour (mm)
+
+                    const weatherText = `The weather in ${location} is currently ${description} with a temperature of ${formatTemperature(temperatureCelsius)}.`;
+
+                    // Display weather information
+                    weatherDiv.textContent = weatherText;
+
+                    // Determine laundry drying recommendation
+                    if (temperatureCelsius <= 0) {
+                        recommendationDiv.textContent = 'Today is too cold to hang laundry outside.';
+                    } else if (rainChance > 0 || !['clear', 'sunny', 'breezy', 'windy'].includes(description)) {
+                        recommendationDiv.textContent = 'It may not be suitable for drying laundry outside.';
+                    } else {
+                        // Calculate sunset time using SunCalc for the user's entered location
+                        fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${location}`)
+                            .then(response => response.json())
+                            .then(locationData => {
+                                if (locationData && locationData[0]) {
+                                    const userLatitude = parseFloat(locationData[0].lat);
+                                    const userLongitude = parseFloat(locationData[0].lon);
+                                    const now = new Date();
+                                    const times = SunCalc.getTimes(now, userLatitude, userLongitude);
+                                    const sunsetTime = times.sunset;
+                                    const sunsetMinus5Hours = new Date(sunsetTime.getTime() - (5 * 60 * 60 * 1000));
+
+                                    // Display laundry recommendation
+                                    recommendationDiv.textContent = `Laundry start time: Start doing laundry at ${formatTime(sunsetMinus5Hours)} to have it done by sunset.`;
+
+                                    // Display sunset time on the webpage
+                                    const sunsetTimeElement = document.getElementById('sunset-time');
+                                    sunsetTimeElement.textContent = `Sunset today will be at ${formatTime(sunsetTime)}`;
+                                } else {
+                                    recommendationDiv.textContent = 'Unable to determine sunset time!';
+                                }
+                            })
+                            .catch(error => {
+                                console.error('Error fetching location data:', error);
+                                recommendationDiv.textContent = 'Unable to determine sunset time!';
+                            });
+                    }
+                })
+                .catch(error => {
+                    console.error('Error fetching weather data:', error);
+                    weatherDiv.textContent = 'Unable to fetch weather data.';
+                    recommendationDiv.textContent = 'Unable to provide a recommendation.';
+                });
+        });
+    </script>
+</body>
+</html>
